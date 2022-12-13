@@ -1,23 +1,51 @@
-import bodyParser from "body-parser";
-import express from "express";
-import pg from "pg";
-
-// Connect to the database using the DATABASE_URL environment
-//   variable injected by Railway
-const pool = new pg.Pool();
-
+const express = require("express");
 const app = express();
-const port = process.env.PORT || 3333;
+const cors = require("cors");
+const path = require("path");
+const bodyparser = require("body-parser");
+require("dotenv").config();
+const pool = require("./db");
+const PORT = process.env.PORT || 5000;
+app.use(cors());
+app.use(express.json());
+app.use(
+  bodyparser.urlencoded({
+    extended: true,
+  })
+);
+app.use(bodyparser.json());
 
-app.use(bodyParser.json());
-app.use(bodyParser.raw({ type: "application/vnd.custom-type" }));
-app.use(bodyParser.text({ type: "text/html" }));
+const dir = path.join(__dirname, "./dist");
+if (process.env.NODE_ENV === "production") {
+  app.use(express.static(dir));
+}
 
-app.get("/", async (req, res) => {
-  const { rows } = await pool.query("SELECT NOW()");
-  res.send(`Hello, World! The time from the DB is ${rows[0].now}`);
-});
+app.post("/api/create", createValues);
+app.get("/api/request", getValues);
 
-app.listen(port, () => {
-  console.log(`Example app listening at http://localhost:${port}`);
+async function createValues(req, res) {
+  const { temperature, altitude, dewpoint, pressure, rain,humidity } = req.body;
+  console.log(req.body);
+  const time = Date.now();
+  const values = [temperature, time, altitude, dewpoint, pressure, rain,humidity];
+  try {
+    const result = await pool.query(
+      `INSERT INTO weather(temperature,time,altitude,dew_point,pressure,rain,humidity) VALUES($1,to_timestamp($2/1000.0),$3,$4,$5,$6,$7)`,
+      values
+    );
+    console.log(result);
+  } catch (err) {
+    console.log(err.stack);
+  }
+}
+
+async function getValues(req, res) {
+  const result = await pool
+    .query("SELECT * FROM weather ORDER BY id DESC LIMIT 1")
+    .then((data) => res.json(data.rows))
+    .catch((err) => console.log("data not present", err));
+}
+
+app.listen(PORT, () => {
+  console.log(`connected in ${PORT}`);
 });
